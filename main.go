@@ -9,14 +9,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fjammes/tablily/conversion"
 	"github.com/fjammes/tablily/log"
 )
-
-// Standard tuning for guitar (E A D G B e)
-var guitarTuning = []string{"E", "A", "D", "G", "B", "e"}
-
-// Standard tuning for bass (E A D G)
-var bassTuning = []string{"E", "A", "D", "G"}
 
 func main() {
 	// Define command-line flags
@@ -30,9 +25,9 @@ func main() {
 	// Validate instrument type
 	var tuning []string
 	if *instrument == "guitar" {
-		tuning = guitarTuning
+		tuning = conversion.GuitarTuning
 	} else if *instrument == "bass" {
-		tuning = bassTuning
+		tuning = conversion.BassTuning
 	} else {
 		fmt.Println("Invalid instrument type")
 		return
@@ -113,7 +108,12 @@ func main() {
 			duration = parts[2]
 		}
 
-		lilypondNote := convertToLilypond(fret, stringNum, tuning, duration)
+		// TODO manage previous octave, string and duration
+		lilypondNote, err := conversion.ConvertToLilypond(fret, stringNum, tuning, duration)
+		if err != nil {
+			fmt.Println("Error converting tab entry to LilyPond format:", err)
+			os.Exit(1)
+		}
 		lilypondNotes = append(lilypondNotes, lilypondNote)
 	}
 
