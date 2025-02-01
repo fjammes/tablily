@@ -31,6 +31,9 @@ var noteMap = map[string]int{
 	"e'":  16,
 }
 
+var second = 2
+var sixteenth = 16
+
 // getOpenStringNote returns the note of the open string for the given string number
 // stringNum is the string number (1 is the highest string)
 func getOpenStringNote(tuning []string, stringNum int) (string, error) {
@@ -55,9 +58,13 @@ func getNoteIndex(note string) (int, error) {
 }
 
 // ConvertToLilypond converts a tab entry to LilyPond format
-func ConvertToLilypond(fret, stringNum int, tuning []string, duration string) (string, error) {
+func ConvertToLilypond(fret, stringNum int, tuning []string, duration int, deadNote bool, rest bool) (string, error) {
 
 	slog.Debug("Convert tab entry to LilyPond format", "fret", fret, "stringNum", stringNum, "tuning", tuning, "duration", duration)
+
+	if rest {
+		return fmt.Sprintf("r%d", duration), nil
+	}
 
 	// Calculate the note name and octave
 	openStringNote, err := getOpenStringNote(tuning, stringNum)
@@ -74,15 +81,14 @@ func ConvertToLilypond(fret, stringNum int, tuning []string, duration string) (s
 
 	slog.Debug("Calculate the note index", "openStringNote", openStringNote, "openStringNoteIndex", openStringNoteIndex, "noteIndex", noteIndex)
 
-	noteNames, err := findNoteName(noteIndex)
+	noteName, err := findNoteName(noteIndex)
 	if err != nil {
 		slog.Error("Invalid note index", "noteIndex", noteIndex)
 		return "", err
 	}
 
 	// Convert duration to an integer to remove leading zeros
-	durationInt, _ := strconv.Atoi(duration)
-	return fmt.Sprintf("%s%d\\%d", noteNames, durationInt, stringNum), nil
+	return fmt.Sprintf("%s%d\\%d", noteName, duration, stringNum), nil
 }
 
 func findNoteName(noteIndex int) (string, error) {
@@ -94,7 +100,8 @@ func findNoteName(noteIndex int) (string, error) {
 		octave = -1
 	}
 
-	scaleIndex := noteIndex % 12
+	scaleIndex := mod(noteIndex, 12)
+	slog.Debug("Find note name", "noteIndex", noteIndex, "scaleIndex", scaleIndex)
 	for note, i := range noteMap {
 		if i == scaleIndex {
 			noteName = note
@@ -125,36 +132,54 @@ func Abs(x int) int {
 // ParseTabEntry parses a tab entry and returns the fret number, string number and duration
 // The input format is "fret:duration\stringNum"
 // duration and stringNum are optional, it uses the previous tab entry to retrieve the default duration and string
-func ParseTabEntry(tabEntry string, previousStringNum int, previousDuration int) (fret int, stringNum int, duration int, err error) {
+// TODO manage 'r' for rest
+func ParseTabEntry(tabEntry string, previousStringNum int, previousDuration int, tuning []string) (fret int, stringNum int, duration int, deadnote bool, rest bool, err error) {
 	backslashParts := strings.Split(tabEntry, "\\")
+	slog.Debug("Parse tab entry", "tabEntry", tabEntry, "backslashParts", backslashParts)
 	if len(backslashParts) > 2 {
-		return -1, -1, -1, fmt.Errorf("invalid input format: %s", tabEntry)
+		return -1, -1, -1, false, false, fmt.Errorf("invalid input format: %s", tabEntry)
 	}
 	if len(backslashParts) == 2 {
 		stringNum, err = strconv.Atoi(backslashParts[1])
-		if err != nil {
-			return -1, -1, -1, fmt.Errorf("invalid string number: %s", backslashParts[1])
+		if err != nil || stringNum < 1 || stringNum > len(tuning) {
+			return -1, -1, -1, false, false, fmt.Errorf("invalid string number: %s in note %s", backslashParts[1], tabEntry)
 		}
 	} else {
 		stringNum = previousStringNum
 	}
 
-	columnParts := strings.Split(backslashParts[0], ":")
+	colonParts := strings.Split(backslashParts[0], ":")
 	if len(backslashParts) > 2 {
-		return -1, -1, -1, fmt.Errorf("invalid input format: %s", tabEntry)
+		return -1, -1, -1, false, false, fmt.Errorf("invalid input format: %s", tabEntry)
 	}
-	if len(columnParts) == 2 {
-		duration, err = strconv.Atoi(columnParts[1])
+	if len(colonParts) == 2 {
+		duration, err = strconv.Atoi(colonParts[1])
 		if err != nil {
-			return -1, -1, -1, fmt.Errorf("invalid string number: %s", backslashParts[1])
+			return -1, -1, -1, false, false, fmt.Errorf("invalid duration: %s in note %s", colonParts[1], tabEntry)
 		}
 	} else {
 		duration = previousDuration
 	}
 
-	fret, err = strconv.Atoi(columnParts[0])
-	if err != nil {
-		return -1, -1, -1, fmt.Errorf("invalid fret number: %s", backslashParts[0])
+	if colonParts[0] == "x" {
+		fret = 0
+		deadnote = true
+	} else if colonParts[0] == "r" {
+		fret = 0
+		rest = true
+	} else {
+		fret, err = strconv.Atoi(colonParts[0])
+		if err != nil {
+			return -1, -1, -1, false, false, fmt.Errorf("invalid fret number: %s in note %s", backslashParts[0], tabEntry)
+		}
 	}
-	return fret, stringNum, duration, nil
+	return fret, stringNum, duration, deadnote, rest, nil
+}
+
+func mod(d int, m int) int {
+	d %= m
+	if d < 0 {
+		d += m
+	}
+	return d
 }

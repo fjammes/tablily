@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/fjammes/tablily/conversion"
@@ -54,7 +53,7 @@ func main() {
 		input = strings.TrimSpace(input)
 	} else {
 		// Read input from stdin
-		fmt.Println("Enter tab (format: fret/string[/duration], e.g., 3/1/4 for 3rd fret on 1st string with duration 4, r for rest, x/string for ghost note):")
+		fmt.Println("Enter tab (format: fret[:duration][/string], e.g., 3/1/4 for 3rd fret on 1st string with duration 4, r for rest, x/string for ghost note):")
 		reader := bufio.NewReader(os.Stdin)
 		input, _ = reader.ReadString('\n')
 		input = strings.TrimSpace(input)
@@ -64,52 +63,18 @@ func main() {
 	notes := strings.Split(input, " ")
 	lilypondNotes := []string{}
 
+	previousStringNum := -1
+	previousDuration := 4
 	for _, note := range notes {
-		if note == "r" {
-			lilypondNotes = append(lilypondNotes, "r4")
-			continue
-		}
-
-		parts := strings.Split(note, "\\")
-		if len(parts) < 2 || len(parts) > 3 {
-			fmt.Println("Invalid input format")
-			return
-		}
-
-		if parts[0] == "x" {
-			stringNum, err := strconv.Atoi(parts[1])
-			if err != nil || stringNum < 1 || stringNum > len(tuning) {
-				fmt.Println("Invalid string number for ghost note")
-				return
-			}
-			duration := "4"
-			if len(parts) == 3 {
-				duration = parts[2]
-			}
-			lilypondNotes = append(lilypondNotes, fmt.Sprintf("/deadNote x%s", duration))
-			continue
-		}
-
-		fret, err := strconv.Atoi(parts[0])
+		// Parse the tab entry
+		fret, stringNum, duration, deadNote, rest, err := conversion.ParseTabEntry(note, previousStringNum, previousDuration, tuning)
 		if err != nil {
-			fmt.Println("Invalid fret number")
-			return
-		}
-		slog.Debug("Retrieve the fret number", "fret", fret)
-
-		stringNum, err := strconv.Atoi(parts[1])
-		if err != nil || stringNum < 1 || stringNum > len(tuning) {
-			fmt.Println("Invalid string number")
-			return
-		}
-
-		duration := "4"
-		if len(parts) == 3 {
-			duration = parts[2]
+			fmt.Println("Error parsing tab entry:", err)
+			os.Exit(1)
 		}
 
 		// TODO manage previous octave, string and duration
-		lilypondNote, err := conversion.ConvertToLilypond(fret, stringNum, tuning, duration)
+		lilypondNote, err := conversion.ConvertToLilypond(fret, stringNum, tuning, duration, deadNote, rest)
 		if err != nil {
 			fmt.Println("Error converting tab entry to LilyPond format:", err)
 			os.Exit(1)
