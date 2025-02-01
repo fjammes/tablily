@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 )
 
 // Exported standard tuning for guitar (E A D G B e)
@@ -53,6 +54,7 @@ func getNoteIndex(note string) (int, error) {
 	return scaleIndex, err
 }
 
+// ConvertToLilypond converts a tab entry to LilyPond format
 func ConvertToLilypond(fret, stringNum int, tuning []string, duration string) (string, error) {
 
 	slog.Debug("Convert tab entry to LilyPond format", "fret", fret, "stringNum", stringNum, "tuning", tuning, "duration", duration)
@@ -118,4 +120,41 @@ func Abs(x int) int {
 		return -x
 	}
 	return x
+}
+
+// ParseTabEntry parses a tab entry and returns the fret number, string number and duration
+// The input format is "fret:duration\stringNum"
+// duration and stringNum are optional, it uses the previous tab entry to retrieve the default duration and string
+func ParseTabEntry(tabEntry string, previousStringNum int, previousDuration int) (fret int, stringNum int, duration int, err error) {
+	backslashParts := strings.Split(tabEntry, "\\")
+	if len(backslashParts) > 2 {
+		return -1, -1, -1, fmt.Errorf("invalid input format: %s", tabEntry)
+	}
+	if len(backslashParts) == 2 {
+		stringNum, err = strconv.Atoi(backslashParts[1])
+		if err != nil {
+			return -1, -1, -1, fmt.Errorf("invalid string number: %s", backslashParts[1])
+		}
+	} else {
+		stringNum = previousStringNum
+	}
+
+	columnParts := strings.Split(backslashParts[0], ":")
+	if len(backslashParts) > 2 {
+		return -1, -1, -1, fmt.Errorf("invalid input format: %s", tabEntry)
+	}
+	if len(columnParts) == 2 {
+		duration, err = strconv.Atoi(columnParts[1])
+		if err != nil {
+			return -1, -1, -1, fmt.Errorf("invalid string number: %s", backslashParts[1])
+		}
+	} else {
+		duration = previousDuration
+	}
+
+	fret, err = strconv.Atoi(columnParts[0])
+	if err != nil {
+		return -1, -1, -1, fmt.Errorf("invalid fret number: %s", backslashParts[0])
+	}
+	return fret, stringNum, duration, nil
 }

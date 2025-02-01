@@ -1,6 +1,9 @@
 package conversion
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestConvertToLilypond(t *testing.T) {
 	tests := []struct {
@@ -60,6 +63,54 @@ func TestGetNoteIndex(t *testing.T) {
 		}
 		if result != test.expected {
 			t.Errorf("getNoteIndex(%s) = %d; want %d", test.note, result, test.expected)
+		}
+	}
+}
+func TestParseTabEntry(t *testing.T) {
+	tests := []struct {
+		tabEntry          string
+		previousDuration  int
+		previousStringNum int
+		expectedFret      int
+		expectedDuration  int
+		expectedStringNum int
+		expectError       error
+	}{
+		{"3:4\\1", 16, 3, 3, 4, 1, nil},
+		{"2\\2", 16, 3, 2, 16, 2, nil},
+		{"0:4", 16, 1, 0, 4, 1, nil},
+		{"12", 16, 1, 12, 16, 1, nil},
+		// TODO {"x\\4", 0, 16, 1, 4, -1, nil},
+		// {"3\\5", 0, 16, 3, 5, "", false},
+		// {"2\\6", 0, 16, 2, 6, "", false},
+		// {"5\\1", 0, 16, 5, 1, "", false},
+		// {"4\\2", 0, 16, 4, 2, "", false},
+		// {"2\\3", 0, 16, 2, 3, "", false},
+		// {"3\\4", 0, 16, 3, 4, "", false},
+		// {"3", 4, 16, 3, 4, 16, false},
+		// {"invalid\\1", 0, "", 0, 0, "", true},
+		{"3\\invalid", 4, 1, -1, -1, -1, fmt.Errorf("invalid string number: invalid")},
+		// {"", 0, 0, "", 0, "", true},
+	}
+
+	for _, test := range tests {
+		fret, stringNum, duration, err := ParseTabEntry(test.tabEntry, test.previousStringNum, test.previousDuration)
+		fmt.Printf("fret: %d, stringNum: %d, duration: %d, err: %v\n", fret, stringNum, duration, err)
+		if test.expectError != nil {
+			if err.Error() != test.expectError.Error() {
+				t.Errorf("ParseTabEntry(%s, %d, %d) error = '%s', expectError = '%s'", test.tabEntry, test.previousStringNum, test.previousDuration, err.Error(), test.expectError.Error())
+			}
+		} else if err != nil {
+			t.Error("Unexpected error: ", err)
+		}
+		if fret != test.expectedFret {
+			t.Errorf("ParseTabEntry(%s, %d, %d) fret = %d, want %d", test.tabEntry, test.previousStringNum, test.previousDuration, fret, test.expectedFret)
+		}
+		if stringNum != test.expectedStringNum {
+			t.Errorf("ParseTabEntry(%s, %d, %d) stringNum = %d, want %d", test.tabEntry, test.previousStringNum, test.previousDuration, stringNum, test.expectedStringNum)
+		}
+		if duration != test.expectedDuration {
+			t.Errorf("ParseTabEntry(%s, %d, %d) duration = %d, want %d", test.tabEntry, test.previousStringNum, test.previousDuration, duration, test.expectedDuration)
 		}
 	}
 }
