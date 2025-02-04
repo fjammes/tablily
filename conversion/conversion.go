@@ -31,8 +31,14 @@ var noteMap = map[string]int{
 	"e'":  16,
 }
 
+var Newline = "-newline-"
+
 var second = 2
 var sixteenth = 16
+
+type TmplData struct {
+	TablilyNotes string
+}
 
 // getOpenStringNote returns the note of the open string for the given string number
 // stringNum is the string number (1 is the highest string)
@@ -58,47 +64,43 @@ func getNoteIndex(note string) (int, error) {
 }
 
 // ConvertToLilypond converts a tab entry to LilyPond format
-func ConvertToLilypond(fret, stringNum int, tuning []string, duration int, deadNote bool, rest bool) (string, error) {
+func ConvertToLilypond(fret, stringNum int, tuning []string, duration int, deadNote bool, rest bool, currentOctave int) (string, int, error) {
 
 	slog.Debug("Convert tab entry to LilyPond format", "fret", fret, "stringNum", stringNum, "tuning", tuning, "duration", duration)
 
 	if rest {
-		return fmt.Sprintf("r%d", duration), nil
+		return fmt.Sprintf("r%d", duration), currentOctave, nil
 	}
 
 	// Calculate the note name and octave
 	openStringNote, err := getOpenStringNote(tuning, stringNum)
 	if err != nil {
 		slog.Error("Invalid string number", "stringNum", stringNum)
-		return "", err
+		return "", 0, err
 	}
 	openStringNoteIndex, err := getNoteIndex(openStringNote)
 	if err != nil {
 		slog.Error("Invalid open string note", "openStringNote", openStringNote)
-		return "", err
+		return "", 0, err
 	}
 	noteIndex := openStringNoteIndex + fret
 
 	slog.Debug("Calculate the note index", "openStringNote", openStringNote, "openStringNoteIndex", openStringNoteIndex, "noteIndex", noteIndex)
 
-	noteName, err := findNoteName(noteIndex)
+	noteName, currentOctave, err := findNoteName(noteIndex, currentOctave)
 	if err != nil {
 		slog.Error("Invalid note index", "noteIndex", noteIndex)
-		return "", err
+		return "", 0, err
 	}
 
 	// Convert duration to an integer to remove leading zeros
-	return fmt.Sprintf("%s%d\\%d", noteName, duration, stringNum), nil
+	return fmt.Sprintf("%s%d\\%d", noteName, duration, stringNum), currentOctave, nil
 }
 
-func findNoteName(noteIndex int) (string, error) {
+func findNoteName(noteIndex int, currentOctave int) (string, int, error) {
 	var octave int
-	var octaveShift string
+	var octaveShift int
 	noteName := ""
-
-	if noteIndex < 0 {
-		octave = -1
-	}
 
 	scaleIndex := mod(noteIndex, 12)
 	slog.Debug("Find note name", "noteIndex", noteIndex, "scaleIndex", scaleIndex)
@@ -108,18 +110,29 @@ func findNoteName(noteIndex int) (string, error) {
 		}
 	}
 	if noteName == "" {
-		return "", fmt.Errorf("invalid note index: %d", noteIndex)
+		return "", 0, fmt.Errorf("invalid note index: %d", noteIndex)
 	}
-	octave = Abs(noteIndex) / 12
-	if noteIndex < 0 {
-		octaveShift = ","
+
+	if noteIndex >= 0 {
+		octave = noteIndex / 12
 	} else {
-		octaveShift = "'"
+		octave = Abs(noteIndex)/12 - 1
 	}
-	for i := 0; i < octave; i++ {
-		noteName += octaveShift
+
+	slog.Debug("Calculate the octave", "octave", octave, "currentOctave", currentOctave)
+
+	octaveShift = octave - currentOctave
+
+	if octaveShift < 0 {
+		for i := 0; i < Abs(octaveShift); i++ {
+			noteName += ","
+		}
+	} else if octaveShift > 0 {
+		for i := 0; i < Abs(octaveShift); i++ {
+			noteName += "'"
+		}
 	}
-	return noteName, nil
+	return noteName, octave, nil
 }
 
 func Abs(x int) int {
@@ -135,7 +148,7 @@ func Abs(x int) int {
 // TODO manage 'r' for rest
 func ParseTabEntry(tabEntry string, previousStringNum int, previousDuration int, tuning []string) (fret int, stringNum int, duration int, deadnote bool, rest bool, err error) {
 	backslashParts := strings.Split(tabEntry, "\\")
-	slog.Debug("Parse tab entry", "tabEntry", tabEntry, "backslashParts", backslashParts)
+	slog.Debug("Parse tab entry", "tabEntry", tabEntry, "backslashParts", backslashParts, "previousStringNum", previousStringNum, "previousDuration", previousDuration)
 	if len(backslashParts) > 2 {
 		return -1, -1, -1, false, false, fmt.Errorf("invalid input format: %s", tabEntry)
 	}

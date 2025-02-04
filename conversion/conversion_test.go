@@ -30,7 +30,7 @@ func TestConvertToLilypond(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result, err := ConvertToLilypond(test.fret, test.stringNum, test.tuning, test.duration, test.deadNote, test.rest)
+		result, _, err := ConvertToLilypond(test.fret, test.stringNum, test.tuning, test.duration, test.deadNote, test.rest, 0)
 		if err != nil {
 			t.Errorf("convertToLilypond(%d, %d, %v, %d) = %s; want %s", test.fret, test.stringNum, test.tuning, test.duration, err, test.expected)
 		}
@@ -71,7 +71,6 @@ func TestGetNoteIndex(t *testing.T) {
 	}
 }
 func TestParseTabEntry(t *testing.T) {
-	var sixteenth = 16
 	tests := []struct {
 		tabEntry          string
 		previousDuration  int
